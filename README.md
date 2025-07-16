@@ -21,6 +21,8 @@ This small **program** lets you use **Steam Remote Play Together** with **any ga
 11. Press any key to refresh the program, then pick your game from the newly displayed menu.
 12. Once your chosen game has started, open **Steam Overlay**, go to **Remote Play Together** and **invite your friend**.
 
+> **TIP:** If your game requires administrator privileges, make sure you run Steam as administrator first.
+
 ### Example of `remoteplay.txt`:  
 
 ```txt
