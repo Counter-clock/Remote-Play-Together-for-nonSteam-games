@@ -173,7 +173,7 @@ int main()
                 if (to != INVALID_HANDLE_VALUE)
                 {
                     for (const std::string& text : lines) WriteFile(to, (text + "\n").c_str(), static_cast<DWORD>((text + "\n").size()), nullptr, nullptr);
-                    SetForegroundWindow(GetConsoleWindow()); Sleep(100); WriteFile(to, "\n", 1, nullptr, nullptr);
+                    SetForegroundWindow(GetConsoleWindow()); Sleep(135); WriteFile(to, "\n", 1, nullptr, nullptr);
                     CloseHandle(to);
                 }
             }
@@ -267,23 +267,23 @@ int main()
                         size_t displaynameSplitOffset = line.find_first_of("|") != std::string::npos ? line.substr(line.find_first_of("|") + 1).find_first_not_of(" ") : std::string::npos;
                         size_t displaynameIndex = displaynameSplitOffset != std::string::npos ? line.find_first_of("|") + 1 + displaynameSplitOffset : std::string::npos;
 
-                        std::string lowercaseExe = line.substr(0, displaynameIndex);
-                        for (char& c : lowercaseExe)
+                        std::string lowercaseExt = line.substr(0, displaynameIndex);
+                        for (char& c : lowercaseExt)
                             if (c >= 'A' && c <= 'Z') c += 32;
 
-                        size_t exeIndex = lowercaseExe.substr(0, displaynameIndex).find(".exe");
-                        size_t filenameIndex = line.substr(0, exeIndex).find_last_of("\\/") != std::string::npos ? line.substr(0, exeIndex).find_last_of("\\/") + 1 : std::string::npos;
+                        size_t extIndex = lowercaseExt.substr(0, displaynameIndex).find(".exe"); if (extIndex == std::string::npos) { extIndex = lowercaseExt.substr(0, displaynameIndex).find(".lnk"); if (extIndex == std::string::npos) extIndex = lowercaseExt.substr(0, displaynameIndex).find(".bat"); }
+                        size_t filenameIndex = line.substr(0, extIndex).find_last_of("\\/") != std::string::npos ? line.substr(0, extIndex).find_last_of("\\/") + 1 : std::string::npos;
 
-                        if (exeIndex != std::string::npos && filenameIndex != std::string::npos)
+                        if (extIndex != std::string::npos && filenameIndex != std::string::npos)
                         {
                             GamePath object;
                             object.directory = line.substr(0, filenameIndex);
-                            object.filename = line.substr(filenameIndex, exeIndex + 4 - filenameIndex);
+                            object.filename = line.substr(filenameIndex, extIndex + 4 - filenameIndex);
 
                             if (displaynameIndex != std::string::npos)
                                 object.displayname = line.substr(displaynameIndex, line.find_last_not_of(" ") + 1 - displaynameIndex);
                             else
-                                object.displayname = line.substr(filenameIndex, exeIndex - filenameIndex);
+                                object.displayname = line.substr(filenameIndex, extIndex - filenameIndex);
 
                             for (char& c : object.directory)
                                 if (c == '/') c = '\\';
