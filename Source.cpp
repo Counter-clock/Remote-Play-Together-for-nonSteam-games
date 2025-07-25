@@ -1,8 +1,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <conio.h>
 #include <Windows.h>
+#include <TlHelp32.h>
+#include <conio.h>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -271,7 +272,7 @@ int main()
                         for (char& c : lowercaseExt)
                             if (c >= 'A' && c <= 'Z') c += 32;
 
-                        size_t extIndex = lowercaseExt.substr(0, displaynameIndex).find(".exe"); if (extIndex == std::string::npos) { extIndex = lowercaseExt.substr(0, displaynameIndex).find(".lnk"); if (extIndex == std::string::npos) extIndex = lowercaseExt.substr(0, displaynameIndex).find(".bat"); }
+                        size_t extIndex = lowercaseExt.substr(0, displaynameIndex).find(".exe");
                         size_t filenameIndex = line.substr(0, extIndex).find_last_of("\\/") != std::string::npos ? line.substr(0, extIndex).find_last_of("\\/") + 1 : std::string::npos;
 
                         if (extIndex != std::string::npos && filenameIndex != std::string::npos)
@@ -415,20 +416,25 @@ int main()
         }
 
         choice--;
-        HINSTANCE result = ShellExecuteW(nullptr, L"open", convertToWString(games[choice].filename).c_str(), nullptr, convertToWString(games[choice].directory).c_str(), SW_SHOWDEFAULT);
 
-        size_t displaynameLength = convertToWString(games[choice].displayname).length();
-        if ((intptr_t)result <= 32)
-        {
+        std::wstring dirPath = convertToWString(games[choice].directory);
+        std::wstring cmdPath = L"\"" + dirPath + convertToWString(games[choice].filename) + L"\"";
+        PROCESS_INFORMATION process_info; STARTUPINFOW startup_info = { sizeof(startup_info) };
+
+        BOOL success = CreateProcessW(nullptr, &cmdPath[0], nullptr, nullptr, FALSE, 0, nullptr, dirPath.c_str(), &startup_info, &process_info);
+
+        if (!success) {
+            DWORD errorCode = GetLastError();
+
             printHeader();
             if (games.size() == 1) {
                 std::cout << " " << games[choice].displayname << std::endl;
                 std::cout << std::string(headerSize, '-') << std::endl;
             }
-            if ((intptr_t)result == 5)
-                 std::cout << "|" << warning << "| Access denied" << std::string(headerSize - 21 + dif_warn, ' ') << "|" << std::endl;
+            if (errorCode == ERROR_ELEVATION_REQUIRED)
+                std::cout << "|" << warning << "| Run as administrator" << std::string(headerSize - 28 + dif_warn, ' ') << "|" << std::endl;
             else std::cout << "|" << warning << "| File not found" << std::string(headerSize - 22 + dif_warn, ' ') << "|" << std::endl;
-                 std::cout << std::string(headerSize, '-') << std::endl;
+            std::cout << std::string(headerSize, '-') << std::endl;
 
             if (games.size() == 1) {
                 waitForKey();
@@ -438,6 +444,7 @@ int main()
         }
 
         headerSize = headerSizeDefault - 2;
+        size_t displaynameLength = convertToWString(games[choice].displayname).length();
         size_t length = displaynameLength + 3 > headerSize ? displaynameLength + 3 : headerSize;
 
         auto launchingHeader = [&clearConsole, &length]()
@@ -468,8 +475,23 @@ int main()
         }
 
         Sleep(800);
-
         cleanUp();
+
+        DWORD currentPid = GetCurrentProcessId();
+        HANDLE processSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        PROCESSENTRY32W procEntry = { sizeof(procEntry) };
+        for (Process32FirstW(processSnapshot, &procEntry); Process32NextW(processSnapshot, &procEntry); )
+            if (!_wcsicmp(procEntry.szExeFile, L"conhost.exe") && procEntry.th32ParentProcessID == currentPid) {
+                HANDLE procHandle = OpenProcess(PROCESS_TERMINATE, FALSE, procEntry.th32ProcessID);
+                if (procHandle) TerminateProcess(procHandle, 0), CloseHandle(procHandle);
+                break;
+            }
+        CloseHandle(processSnapshot);
+
+        WaitForSingleObject(process_info.hProcess, INFINITE);
+        CloseHandle(process_info.hProcess);
+        CloseHandle(process_info.hThread);
+
         return 0;
     }
 }
