@@ -11,7 +11,7 @@
 
 struct GamePath 
 { 
-    std::string directory, filename, displayname; 
+    std::string directory, filename, displayname; bool exeFile;
 };
 
 int main()
@@ -272,12 +272,14 @@ int main()
                         for (char& c : lowercaseExt)
                             if (c >= 'A' && c <= 'Z') c += 32;
 
-                        size_t extIndex = lowercaseExt.substr(0, displaynameIndex).find(".exe");
+                        size_t extIndex = lowercaseExt.substr(0, displaynameIndex).find(".exe"); bool exeFile = true; if (extIndex == std::string::npos) { exeFile = false; extIndex = lowercaseExt.substr(0, displaynameIndex).find(".lnk"); if (extIndex == std::string::npos) extIndex = lowercaseExt.substr(0, displaynameIndex).find(".bat"); }
                         size_t filenameIndex = line.substr(0, extIndex).find_last_of("\\/") != std::string::npos ? line.substr(0, extIndex).find_last_of("\\/") + 1 : std::string::npos;
 
                         if (extIndex != std::string::npos && filenameIndex != std::string::npos)
                         {
                             GamePath object;
+                            object.exeFile = exeFile;
+
                             object.directory = line.substr(0, filenameIndex);
                             object.filename = line.substr(filenameIndex, extIndex + 4 - filenameIndex);
 
@@ -416,27 +418,44 @@ int main()
         }
 
         choice--;
-
         std::wstring dirPath = convertToWString(games[choice].directory);
-        std::wstring cmdPath = L"\"" + dirPath + convertToWString(games[choice].filename) + L"\"";
-        PROCESS_INFORMATION process_info; STARTUPINFOW startup_info = { sizeof(startup_info) };
+        std::wstring fullPath = dirPath + convertToWString(games[choice].filename);
 
-        BOOL success = CreateProcessW(nullptr, &cmdPath[0], nullptr, nullptr, FALSE, 0, nullptr, dirPath.c_str(), &startup_info, &process_info);
+        BOOL success = FALSE; HANDLE processHandle = nullptr;
+        if (games[choice].exeFile) 
+        {
+            PROCESS_INFORMATION processInfo; STARTUPINFOW startupInfo = { sizeof(startupInfo) };
+            if (success = CreateProcessW(fullPath.c_str(), nullptr, nullptr, nullptr, TRUE, 0, nullptr, dirPath.c_str(), &startupInfo, &processInfo))
+                CloseHandle(processInfo.hThread);
 
-        if (!success) {
-            DWORD errorCode = GetLastError();
+            processHandle = processInfo.hProcess;
+        }
+        else
+        {
+            SHELLEXECUTEINFOW executeInfo = { sizeof(executeInfo) }; executeInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI; executeInfo.hwnd = nullptr; executeInfo.lpVerb = L"open"; executeInfo.lpFile = fullPath.c_str(); executeInfo.lpParameters = nullptr; executeInfo.lpDirectory = dirPath.c_str(); executeInfo.nShow = SW_SHOWNORMAL;
+            success = ShellExecuteExW(&executeInfo);
 
+            processHandle = executeInfo.hProcess;
+        }
+        DWORD error = GetLastError();
+
+        if (!success) 
+        {
             printHeader();
-            if (games.size() == 1) {
+
+            if (games.size() == 1) 
+            {
                 std::cout << " " << games[choice].displayname << std::endl;
                 std::cout << std::string(headerSize, '-') << std::endl;
             }
-            if (errorCode == ERROR_ELEVATION_REQUIRED)
-                std::cout << "|" << warning << "| Run as administrator" << std::string(headerSize - 28 + dif_warn, ' ') << "|" << std::endl;
+
+            if (error == ERROR_ELEVATION_REQUIRED || error == ERROR_ACCESS_DENIED || error == ERROR_CANCELLED || error == ERROR_PRIVILEGE_NOT_HELD)
+                 std::cout << "|" << warning << "| Run as administrator" << std::string(headerSize - 28 + dif_warn, ' ') << "|" << std::endl;
             else std::cout << "|" << warning << "| File not found" << std::string(headerSize - 22 + dif_warn, ' ') << "|" << std::endl;
             std::cout << std::string(headerSize, '-') << std::endl;
 
-            if (games.size() == 1) {
+            if (games.size() == 1) 
+            {
                 waitForKey();
                 printHeader();
             }
@@ -480,18 +499,21 @@ int main()
         DWORD currentPid = GetCurrentProcessId();
         HANDLE processSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         PROCESSENTRY32W procEntry = { sizeof(procEntry) };
-        for (Process32FirstW(processSnapshot, &procEntry); Process32NextW(processSnapshot, &procEntry); )
-            if (!_wcsicmp(procEntry.szExeFile, L"conhost.exe") && procEntry.th32ParentProcessID == currentPid) {
-                HANDLE procHandle = OpenProcess(PROCESS_TERMINATE, FALSE, procEntry.th32ProcessID);
-                if (procHandle) TerminateProcess(procHandle, 0), CloseHandle(procHandle);
-                break;
-            }
+        if (Process32FirstW(processSnapshot, &procEntry))
+            do {
+                if (!_wcsicmp(procEntry.szExeFile, L"conhost.exe") && procEntry.th32ParentProcessID == currentPid) {
+                    HANDLE procHandle = OpenProcess(PROCESS_TERMINATE, FALSE, procEntry.th32ProcessID);
+                    if (procHandle) TerminateProcess(procHandle, 0), CloseHandle(procHandle);
+                    break;
+                }
+            } while (Process32NextW(processSnapshot, &procEntry));
         CloseHandle(processSnapshot);
-
-        WaitForSingleObject(process_info.hProcess, INFINITE);
-        CloseHandle(process_info.hProcess);
-        CloseHandle(process_info.hThread);
-
+        if (processHandle) 
+        {
+            WaitForSingleObject(processHandle, INFINITE);
+            CloseHandle(processHandle);
+        }
+        
         return 0;
     }
 }
